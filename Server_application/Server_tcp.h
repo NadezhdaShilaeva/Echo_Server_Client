@@ -76,7 +76,8 @@ private:
 			{
 				if (!ec)
 				{
-					Stop();
+					buffer.consume(length);
+					ReadMessage();
 				}
 				else
 				{

@@ -13,8 +13,8 @@ using namespace boost::asio;
 class Client_tcp : public boost::enable_shared_from_this<Client_tcp>
 {
 public:
-	Client_tcp(io_context& io_context, const std::string& message)
-		: context(io_context), socket(io_context), message(message)
+	Client_tcp(io_context& io_context)
+		: context(io_context), socket(io_context)
 	{}
 
 	~Client_tcp()
@@ -22,9 +22,9 @@ public:
 		Stop();
 	}
 
-	static boost::shared_ptr<Client_tcp> Start(io_context& io_context, ip::tcp::endpoint endpoint, const std::string& message)
+	static boost::shared_ptr<Client_tcp> Start(io_context& io_context, ip::tcp::endpoint endpoint)
 	{
-		boost::shared_ptr<Client_tcp> newClient(new Client_tcp(io_context, message));
+		boost::shared_ptr<Client_tcp> newClient(new Client_tcp(io_context));
 		newClient->Start(endpoint);
 
 		return newClient;
@@ -41,7 +41,7 @@ public:
 					if (!ec)
 					{
 						std::cout << "Connected to server.\n";
-						WriteMessage(message);
+						ReadMessage();
 					}
 					else
 					{
@@ -49,6 +49,8 @@ public:
 						Stop();
 					}
 				});
+
+			thread_context = std::thread([this]() { context.run(); });
 		}
 		catch (std::exception& e)
 		{
@@ -66,11 +68,14 @@ public:
 	{
 		if (IsStarted())
 		{
-			socket.close();
+			post(context, [this]() { socket.close(); });
 		}
-	}
+		
+		context.stop();
 
-private:
+		if (thread_context.joinable())
+			thread_context.join();
+	}
 	void WriteMessage(const std::string& message)
 	{
 		std::ostream write_buf(&write_buffer);
@@ -82,6 +87,7 @@ private:
 			{
 				if (!ec)
 				{
+					write_buffer.consume(length);
 					ReadMessage();
 				}
 				else
@@ -92,11 +98,13 @@ private:
 			});
 	}
 
+private:
+
 	void ReadMessage()
 	{
 		auto self(shared_from_this());
 		async_read_until(socket, read_buffer, "\n",
-			[this, self](boost::system::error_code ec, std::size_t lenght)
+			[this, self](boost::system::error_code ec, std::size_t length)
 			{
 				if (!ec) {
 					std::string serverMessage;
@@ -110,12 +118,13 @@ private:
 					std::cerr << "Error from client: " << ec << '\n';
 				}
 
-				Stop();
+				ReadMessage();
 			});
 	}
 
 private:
 	io_context& context;
+	std::thread thread_context;
 	ip::tcp::socket socket;
 	std::string message;
 	boost::asio::streambuf read_buffer;

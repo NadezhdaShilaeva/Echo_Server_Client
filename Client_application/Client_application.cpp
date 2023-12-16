@@ -6,12 +6,14 @@
 
 int main(int argc, char* argv[])
 {
+	boost::asio::io_context io_context;
 	ip::tcp::endpoint endpoint(ip::address::from_string("127.0.0.1"), 8001);
+	boost::shared_ptr<Client_tcp> client = Client_tcp::Start(io_context, endpoint);
+
 	std::string message;
 
 	while (true)
 	{
-		std::cout << "Enter message (or 'exit' to stop): ";
 		getline(std::cin, message);
 
 		if (message == "exit")
@@ -20,11 +22,11 @@ int main(int argc, char* argv[])
 		}
 		else
 		{
-			boost::asio::io_context io_context;
-			Client_tcp::Start(io_context, endpoint, message);
-			io_context.run();
+			client->WriteMessage(message);
 		}
 	}
+
+	client->Stop();
 
 	return 0;
 }
